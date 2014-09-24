@@ -1,9 +1,9 @@
 package heka_docker
 
 import (
-	//	"errors"
 	"fmt"
 	"github.com/fsouza/go-dockerclient"
+	"github.com/mozilla-services/heka/message"
 	"github.com/mozilla-services/heka/pipeline"
 	"log"
 	"time"
@@ -29,8 +29,9 @@ type DockerInputConfig struct {
 }
 
 type DockerInput struct {
-	client *docker.Client
-	conf   *DockerInputConfig
+	client   *docker.Client
+	conf     *DockerInputConfig
+	stopChan chan bool
 }
 
 func (di *DockerInput) ConfigStruct() interface{} {
@@ -68,89 +69,61 @@ func (di *DockerInput) Run(ir pipeline.InputRunner, h pipeline.PluginHelper) err
 		decoder = dRunner.Decoder()
 	}
 
-	if decoder != nil {
-	}
-
-	attacher := NewAttachManager(di.client)
-
 	logstream := make(chan *Log)
 	defer close(logstream)
 
 	closer := make(chan bool)
+	go NewAttachManager(di.client).Listen(nil, logstream, closer)
 
-	go attacher.Listen(nil, logstream, closer)
+	stopped := false
 
-	for logline := range logstream {
-		pack = <-packSupply
-		pack.Message.SetType("docker_log")
-		//pack.Message.SetLogger(n.Channel)
-		pack.Message.SetPayload(logline.Data)
-		pack.Message.SetTimestamp(time.Now().UnixNano())
-		var packs []*pipeline.PipelinePack
-		if decoder == nil {
-			packs = []*pipeline.PipelinePack{pack}
-		} else {
-			packs, e = decoder.Decode(pack)
-		}
-		if packs != nil {
-			for _, p := range packs {
-				ir.Inject(p)
+	for !stopped {
+		select {
+		case <-di.stopChan:
+			stopped = true
+		case logline := <-logstream:
+			pack = <-packSupply
+
+			// Type of message i.e. "WebLog".
+			pack.Message.SetType("docker_log")
+
+			// Data source i.e. "Apache", "TCPInput", "/var/log/test.log".
+			pack.Message.SetLogger(logline.Name)
+
+			// Textual data i.e. log line, filename.
+			pack.Message.SetPayload(logline.Data)
+
+			// Number of nanoseconds since the UNIX epoch.
+			pack.Message.SetTimestamp(time.Now().UnixNano())
+
+			// Add container ID as a field
+			message.NewStringField(pack.Message, "ID", logline.ID)
+
+			var packs []*pipeline.PipelinePack
+			if decoder == nil {
+				packs = []*pipeline.PipelinePack{pack}
+			} else {
+				packs, e = decoder.Decode(pack)
 			}
-		} else {
-			if e != nil {
-				ir.LogError(fmt.Errorf("Couldn't parse Docker message!"))
+			if packs != nil {
+				for _, p := range packs {
+					ir.Inject(p)
+				}
+			} else {
+				if e != nil {
+					ir.LogError(fmt.Errorf("Couldn't parse Docker message!"))
+				}
+				pack.Recycle()
 			}
-			pack.Recycle()
 		}
 	}
 
-	//Connect to the channel
-	/*
-		psc := redis.PubSubConn{Conn: di.conn}
-		psc.PSubscribe(di.conf.Channel)
-
-		for {
-			switch n := psc.Receive().(type) {
-			case redis.PMessage:
-				// Grab an empty PipelinePack from the InputRunner
-				pack = <-packSupply
-				pack.Message.SetType("redis_pub_sub")
-				pack.Message.SetLogger(n.Channel)
-				pack.Message.SetPayload(string(n.Data))
-				pack.Message.SetTimestamp(time.Now().UnixNano())
-				var packs []*pipeline.PipelinePack
-				if decoder == nil {
-					packs = []*pipeline.PipelinePack{pack}
-				} else {
-					packs, e = decoder.Decode(pack)
-				}
-				if packs != nil {
-					for _, p := range packs {
-						ir.Inject(p)
-					}
-				} else {
-					if e != nil {
-						ir.LogError(fmt.Errorf("Couldn't parse Redis message: %s", n.Data))
-					}
-					pack.Recycle()
-				}
-			case redis.Subscription:
-				ir.LogMessage(fmt.Sprintf("Subscription: %s %s %d\n", n.Kind, n.Channel, n.Count))
-				if n.Count == 0 {
-					return errors.New("No channel to subscribe")
-				}
-			case error:
-				fmt.Printf("error: %v\n", n)
-				return n
-			}
-		}
-	*/
-
+	closer <- true
 	return nil
 }
 
 func (di *DockerInput) Stop() {
-	// di.conn.Close()
+	close(di.stopChan)
 }
 
 func init() {
