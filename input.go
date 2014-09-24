@@ -97,7 +97,8 @@ func (di *DockerInput) Run(ir pipeline.InputRunner, h pipeline.PluginHelper) err
 			pack.Message.SetTimestamp(time.Now().UnixNano())
 
 			// Add container ID as a field
-			message.NewStringField(pack.Message, "ID", logline.ID)
+			message.NewStringField(pack.Message, "id", logline.ID)
+			message.NewStringField(pack.Message, "type", logline.Type)
 
 			var packs []*pipeline.PipelinePack
 			if decoder == nil {
