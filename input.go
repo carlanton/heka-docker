@@ -69,6 +69,7 @@ func (di *DockerInput) Run(ir pipeline.InputRunner, h pipeline.PluginHelper) err
 		decoder = dRunner.Decoder()
 	}
 
+	di.stopChan = make(chan bool)
 	logstream := make(chan *Log)
 	defer close(logstream)
 
