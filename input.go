@@ -4,7 +4,6 @@ import (
 	//	"errors"
 	"fmt"
 	"github.com/fsouza/go-dockerclient"
-	"github.com/garyburd/redigo/redis"
 	"github.com/mozilla-services/heka/pipeline"
 	"log"
 	"time"
@@ -32,7 +31,6 @@ type DockerInputConfig struct {
 type DockerInput struct {
 	client *docker.Client
 	conf   *DockerInputConfig
-	conn   redis.Conn
 }
 
 func (di *DockerInput) ConfigStruct() interface{} {
@@ -152,7 +150,7 @@ func (di *DockerInput) Run(ir pipeline.InputRunner, h pipeline.PluginHelper) err
 }
 
 func (di *DockerInput) Stop() {
-	di.conn.Close()
+	// di.conn.Close()
 }
 
 func init() {
