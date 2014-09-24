@@ -1,11 +1,13 @@
 package heka_docker
 
 import (
+	"code.google.com/p/go-uuid/uuid"
 	"fmt"
 	"github.com/fsouza/go-dockerclient"
 	"github.com/mozilla-services/heka/message"
 	"github.com/mozilla-services/heka/pipeline"
 	"log"
+	"os"
 	"time"
 )
 
@@ -78,6 +80,11 @@ func (di *DockerInput) Run(ir pipeline.InputRunner, h pipeline.PluginHelper) err
 
 	stopped := false
 
+	hostname, err := os.Hostname()
+	if err != nil {
+		hostname = ""
+	}
+
 	for !stopped {
 		select {
 		case <-di.stopChan:
@@ -85,21 +92,14 @@ func (di *DockerInput) Run(ir pipeline.InputRunner, h pipeline.PluginHelper) err
 		case logline := <-logstream:
 			pack = <-packSupply
 
-			// Type of message i.e. "WebLog".
-			pack.Message.SetType("docker_log")
-
-			// Data source i.e. "Apache", "TCPInput", "/var/log/test.log".
-			pack.Message.SetLogger(logline.Name)
-
-			// Textual data i.e. log line, filename.
+			pack.Message.SetType("docker-container")
+			pack.Message.SetLogger(logline.Type) // stderr or stdout
+			pack.Message.SetHostname(hostname)   // Use the host's hosntame
 			pack.Message.SetPayload(logline.Data)
-
-			// Number of nanoseconds since the UNIX epoch.
 			pack.Message.SetTimestamp(time.Now().UnixNano())
-
-			// Add container ID as a field
-			message.NewStringField(pack.Message, "id", logline.ID)
-			message.NewStringField(pack.Message, "type", logline.Type)
+			pack.Message.SetUuid(uuid.NewRandom())
+			message.NewStringField(pack.Message, "ContainerID", logline.ID)
+			message.NewStringField(pack.Message, "ContainerName", logline.Name)
 
 			var packs []*pipeline.PipelinePack
 			if decoder == nil {
