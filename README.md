@@ -22,6 +22,6 @@ endpoint = "unix:///var/run/docker.sock"
 
 [debug]
 type = "LogOutput"
-message_matcher = "Type == 'docker_log'"
+message_matcher = "Type == 'docker-container'"
 encoder = "ESJsonEncoder"
 ```
