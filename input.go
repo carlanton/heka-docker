@@ -6,24 +6,9 @@ import (
 	"github.com/fsouza/go-dockerclient"
 	"github.com/mozilla-services/heka/message"
 	"github.com/mozilla-services/heka/pipeline"
-	"log"
 	"os"
 	"time"
 )
-
-var debugMode bool
-
-func debug(v ...interface{}) {
-	if debugMode {
-		log.Println(v...)
-	}
-}
-
-func assert(err error, context string) {
-	if err != nil {
-		log.Fatal(context+": ", err)
-	}
-}
 
 type DockerInputConfig struct {
 	Endpoint    string `toml:"endpoint"`

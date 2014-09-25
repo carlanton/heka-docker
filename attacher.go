@@ -1,5 +1,9 @@
 package heka_docker
 
+//
+// Borrowed from https://github.com/progrium/logspout
+//
+
 import (
 	"bufio"
 	"io"
@@ -9,6 +13,30 @@ import (
 
 	"github.com/fsouza/go-dockerclient"
 )
+
+type AttachEvent struct {
+	Type string
+	ID   string
+	Name string
+}
+
+type Log struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Type string `json:"type"`
+	Data string `json:"data"`
+}
+
+type Source struct {
+	ID     string   `json:"id,omitempty"`
+	Name   string   `json:"name,omitempty"`
+	Filter string   `json:"filter,omitempty"`
+	Types  []string `json:"types,omitempty"`
+}
+
+func (s *Source) All() bool {
+	return s.ID == "" && s.Name == "" && s.Filter == ""
+}
 
 type AttachManager struct {
 	sync.Mutex
@@ -32,7 +60,6 @@ func NewAttachManager(client *docker.Client) *AttachManager {
 		events := make(chan *docker.APIEvents)
 		assert(client.AddEventListener(events), "attacher")
 		for msg := range events {
-			debug("event:", msg.ID[:12], msg.Status)
 			if msg.Status == "start" {
 				go m.attach(msg.ID[:12])
 			}
@@ -63,7 +90,6 @@ func (m *AttachManager) attach(id string) {
 		})
 		outwr.Close()
 		errwr.Close()
-		debug("attach:", id, "finished")
 		if err != nil {
 			close(success)
 			failure <- err
@@ -80,10 +106,8 @@ func (m *AttachManager) attach(id string) {
 		m.Unlock()
 		success <- struct{}{}
 		m.send(&AttachEvent{ID: id, Name: name, Type: "attach"})
-		debug("attach:", id, "success")
 		return
 	}
-	debug("attach:", id, "failure:", <-failure)
 }
 
 func (m *AttachManager) send(event *AttachEvent) {
@@ -167,9 +191,6 @@ func NewLogPump(stdout, stderr io.Reader, id, name string) *LogPump {
 		for {
 			data, err := buf.ReadBytes('\n')
 			if err != nil {
-				if err != io.EOF {
-					debug("pump:", id, typ+":", err)
-				}
 				return
 			}
 			obj.send(&Log{
@@ -204,4 +225,10 @@ func (o *LogPump) RemoveListener(ch chan *Log) {
 	o.Lock()
 	defer o.Unlock()
 	delete(o.channels, ch)
+}
+
+func assert(err error, context string) {
+	if err != nil {
+		log.Fatal(context+": ", err)
+	}
 }
