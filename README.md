@@ -16,6 +16,7 @@ for compiling in plugins.
 
 ```toml
 [DockerInput]
+endpoint = "unix:///var/run/docker.sock"
 
 [ESJsonEncoder]
 
