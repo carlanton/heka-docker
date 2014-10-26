@@ -1,3 +1,8 @@
+# Deprecated!
+
+This plugin has been merged into Heka core under the name DockerLogInput. Just use that instead :-)
+
+
 heka-docker
 ===========
 
